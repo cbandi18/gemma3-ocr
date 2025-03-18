@@ -1,3 +1,5 @@
+import os
+import tempfile
 import streamlit as st
 import ollama
 import pytesseract
@@ -16,11 +18,19 @@ def extract_text(image):
     return text
 
 def process_text_with_gemma3(text):         #function to process the extracted text with gemma3
-    response= ollama.chat(
-    model = 'gemma3:12b',
-    messages = [{"role" : "user", "content" : text}] 
-)
-    return response['messages']
+    try:
+        response= ollama.chat(
+        model = 'gemma3:latest',
+        messages = [{"role" : "user", "content" : text}] 
+        )
+        print("OLLAMA RESPONSE:", response)  # Debugging output
+
+        if hasattr(response, 'message') and response.message:
+            return response.message.content  # Access message content correctly
+        else:
+            return f"Error: Unexpected response format. Full response: {response}"
+    except Exception as e:
+        return f"Error processing text: {str(e)}"
 
 #Streamlit UI
 st.title("OCR and Structured Text Extraction with Gemma-3 Vision")
@@ -51,14 +61,16 @@ def extract_data_from_text(text_file):
 
 #To capture the video from webcam
 input_video = st.checkbox("Use webcam video stream", value=False)
-video_frame = None
+
+#Process uploaded inputs
+extracted_text = ""
 
 if uploaded_image is not None:
     image = Image.open(uploaded_image)
     st.image(image, caption="Upload Image", use_column_width=True)
 
     img_cv = np.array(image)        #Converting the image to openCV format
-    img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RBG2BGR)
+    img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
 
     #Extracted text using the tesseract
     extracted_text = extract_text(image)
@@ -66,35 +78,34 @@ if uploaded_image is not None:
     st.text(extracted_text)
 
 elif uploaded_video is not None:
-    video_bytes = uploaded_video.read()
-    video_path = "/tmp/uploaded_video.mp4"      #Saving the video temporarily
+    temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    temp_video.write(uploaded_video.read())
+    temp_video.close()
 
-    with open(video_path, "wb") as f:
-        f.write(video_bytes) 
-
-    capture = cv2.VideoCapture(video_path)
+    capture = cv2.VideoCapture(temp_video.name)
 
     if not capture.isOpened():
         st.error("Error Opening Video File.")
     else:
         frame_counter = 0
-        while capture.isOpened():
-            ret, frame = capture.read()
-            frame_counter += 1
+        stop_button_clicked = False
 
-            if not ret or frame_counter > 30:       # Limiting to 30 frames for performance
+        while capture.isOpened() or frame_counter > 30:     # Limiting to 30 frames for performance
+            ret, frame = capture.read()
+
+            if not ret or stop_button_clicked:
                 break
             
             # Converting the frame to PIL Image for Streamlit display
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             pil_image = Image.fromarray(frame_rgb)
             
             # Display video stream in Streamlit
-            st.image(pil_image, caption="Video Frame", use_column_width=True)
+            st.image(pil_image, caption=f"Processing Frame {frame_counter+1}", use_column_width=True)
 
             # Extract text using OCR from the video frame
             extracted_text = extract_text(pil_image)
-            st.subheader("Extracted Text From Frame")
+            st.subheader(f"Extracted Text from Frame {frame_counter+1}:")
             st.text(extracted_text)
 
             # Processing structured text with Gemma-3 Vision
@@ -102,11 +113,14 @@ elif uploaded_video is not None:
             st.subheader("Extracted Data Output")
             st.text(structured_text)
 
+            frame_counter += 1
+
             # Option to break the loop after showing a few frames or stop it manually
-            if st.button("Stop Video"):
-                capture.release()
-                st.text("Video Stream Stopped")
-                break
+            if st.button("Stop Video Processing"):
+                stop_button_clicked = True
+
+            capture.release()
+            os.remove(temp_video.name)      # Clean up temp file
 
 elif uploaded_document is not None:
     document_type = uploaded_document.type
