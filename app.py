@@ -74,7 +74,7 @@ if uploaded_image is not None:
 
     #Extracted text using the tesseract
     extracted_text = extract_text(image)
-    st.subheader("Extracted Text: ")
+    st.subheader("Extracted Text with OCR") 
     st.text(extracted_text)
 
 elif uploaded_video is not None:
@@ -110,7 +110,7 @@ elif uploaded_video is not None:
 
             # Processing structured text with Gemma-3 Vision
             structured_text = process_text_with_gemma3(extracted_text)
-            st.subheader("Extracted Data Output")
+            st.subheader("Extracted Data Output with OCR")
             st.text(structured_text)
 
             frame_counter += 1
@@ -142,7 +142,7 @@ else:
 # Use extracted text or user input text for processing
 final_text = user_text if user_text else extracted_text
 
-if st.button("Extract Structured Data") and final_text:
+if st.button("Extract Structured Data with Gemma3") and final_text:
     structured_text = process_text_with_gemma3(final_text)
-    st.subheader("Structured Data Output")
+    st.subheader("Structured Data Output with OCR")
     st.text(structured_text)
